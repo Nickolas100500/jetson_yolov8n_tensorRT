@@ -35,6 +35,41 @@ camera.py — потрібно налаштувати свій camera pipeline.
 JetPack 4.6
 
 TensorRT (перевірити сумісну версію для конкретної збірки)
+------------------------------------------------------------------------------------------------------------------------
+🔍 Camera Check
+
+To verify the camera functionality, run:
+
+gst-launch-1.0 nvarguscamerasrc ! nvoverlaysink
+
+⚠️ Issues Encountered
+
+❌ Incorrect object classification
+Example: detected class ['bird'] instead of expected "person".
+
+❌ Invalid interpretation of YOLOv8 output tensors
+Jetson Nano works well with YOLOv5, but using YOLOv8 caused incorrect inference results.
+
+🧩 Implementation
+
+Developed custom classes TRTDetector and TRTResults, mirroring the behavior of Ultralytics inference on desktop.
+The detector takes a video frame and a confidence threshold parameter conf=0.3, where conf defines model confidence.
+
+📉 Project Status
+
+The project was paused due to Jetson Nano’s limited performance.
+The main issue was incorrect YOLOv8 tensor parsing.
+👉 Solution: switch to YOLOv5, which is better optimized for Jetson Nano.
+
+📂 Key Files
+
+camera.py — requires manual setup of the camera pipeline.
+
+⚡ Requirements
+
+JetPack 4.6
+
+TensorRT (check compatibility with your specific JetPack version)
 
 
 
