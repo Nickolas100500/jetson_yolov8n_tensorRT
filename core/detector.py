@@ -164,48 +164,32 @@ class TRTDetector:
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-x))  
 
-    def postprocess(self, preds: np.ndarray, orig_shape: Tuple[int,int], conf_thres: float = 0.25, iou_thres: float = 0.45) -> np.ndarray:
-        try:
-            # preds повертає в нормальному вігляді (0 -1)
-            preds = preds[0].T  # (8400, 84)
+ def postprocess(self, preds, orig_shape, conf_thres=0.25, iou_thres=0.45):
+    preds = preds[0].T                                    # (8400, 84)
+    # НИКАКОГО sigmoid — class scores уже sigmoid'нуты на экспорте Ultralytics
+    class_confs = preds[:, 4:]                           # (8400, 80)
+    cls_ids = np.argmax(class_confs, axis=1)
+    cls_conf = class_confs[np.arange(len(cls_ids)), cls_ids]
+    scores = cls_conf
 
-            # Застосовуємо sigmoid до confidence (objectness) і класів
-            preds[:, 4] = self.sigmoid(preds[:, 4])       # objectness score
-            preds[:, 5:] = self.sigmoid(preds[:, 5:])     # класові ймовірності
+    mask = scores > conf_thres
+    preds, scores, cls_ids = preds[mask], scores[mask], cls_ids[mask]
+    if len(preds) == 0:
+        return np.empty((0, 6), dtype=np.float32)
 
-            obj_conf = preds[:, 4]
-            class_confs = preds[:, 5:]
-            cls_ids = np.argmax(class_confs, axis=1)
-            cls_conf = class_confs[np.arange(len(cls_ids)), cls_ids]
+    # cx,cy,w,h → xyxy в координатах 640×640
+    boxes = np.zeros((len(preds), 4), dtype=np.float32)
+    boxes[:, 0] = preds[:, 0] - preds[:, 2] / 2
+    boxes[:, 1] = preds[:, 1] - preds[:, 3] / 2
+    boxes[:, 2] = preds[:, 0] + preds[:, 2] / 2
+    boxes[:, 3] = preds[:, 1] + preds[:, 3] / 2
 
-            scores = obj_conf * cls_conf
+    keep = self._nms(boxes, scores, iou_thres)
+    return np.concatenate([
+        boxes[keep], scores[keep, None],
+        cls_ids[keep, None].astype(np.float32)
+    ], axis=1)
 
-            mask = scores > conf_thres
-            preds = preds[mask]
-            scores = scores[mask]
-            cls_ids = cls_ids[mask]
-
-
-            if len(preds) == 0:
-                print("No detections")
-                return np.empty((0, 6), dtype=np.float32)
-
-            boxes = np.zeros((len(preds), 4), dtype=np.float32)
-            boxes[:, 0] = preds[:, 0] - preds[:, 2] / 2  # x1
-            boxes[:, 1] = preds[:, 1] - preds[:, 3] / 2  # y1
-            boxes[:, 2] = preds[:, 0] + preds[:, 2] / 2  # x2
-            boxes[:, 3] = preds[:, 1] + preds[:, 3] / 2  # y2
-
-            keep = self._nms(boxes, scores, iou_thres)
-
-            if len(keep) == 0:
-                return np.empty((0, 6), dtype=np.float32)
-
-            return np.concatenate([
-                boxes[keep],
-                scores[keep, None],
-                cls_ids[keep, None].astype(np.float32)
-            ], axis=1)
 
         except Exception as e:
             print(f"Postprocessing error: {e}")
